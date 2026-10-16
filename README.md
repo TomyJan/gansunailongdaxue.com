@@ -19,12 +19,14 @@ Wrangler 会自动执行 `pnpm run build`，将配置和当前提交的前 7 位
 
 ## 可选配置
 
-以下是可选的**构建环境变量**，每项独立回退，未设置或留空均使用表中的默认值。配置会成为公开页面内容，修改后需要重新构建、部署。
+以下是可选的**构建环境变量**，每项独立回退，未设置或留空均使用表中的默认值。文本、链接及下载的图片会成为公开页面内容，修改后需要重新构建、部署。
 
 | 变量               | 用途                                           | 默认值                                 |
 | ------------------ | ---------------------------------------------- | -------------------------------------- |
 | `SITE_NAME`        | 浏览器标题、页面标题、描述及校徽替代文字       | `甘肃奶龙大学`                         |
 | `STICKER_TXT`      | 首页贴纸文本                                   | `奶龙出没`                             |
+| `LOGO_URL`         | 校徽 PNG 图片的下载地址，同时用于 Apple 触屏图标 | 内置 `public/logo.png`                |
+| `FAVICON_URL`      | 浏览器图标的下载地址，支持 PNG 或 ICO           | 内置 `public/favicon.ico`             |
 | `GO_BTN_TXT`       | 主按钮文本                                     | `GO`                                   |
 | `GO_BTN_TGT`       | 主按钮跳转地址                                 | `https://www.lut.edu.cn/`              |
 | `UMAMI_SCRIPT_URL` | Umami 采集脚本地址                             | `https://umami.amoe.cc/script.js`      |
@@ -33,6 +35,8 @@ Wrangler 会自动执行 `pnpm run build`，将配置和当前提交的前 7 位
 | `GROUP_LINK`       | 加群链接                                       | `https://qm.qq.com/q/AjLVv044nu`       |
 
 URL 配置必须是完整的 HTTP(S) 地址。长按钮文案自动使用较小字号。
+
+`LOGO_URL` 和 `FAVICON_URL` 只在构建时下载图片，保存到 `dist/` 并替换对应的默认资源；首页、用户协议和隐私政策均引用本站图片，HTML 不包含图片源地址。两个变量各自独立回退，单独更换校徽不会改变浏览器图标。建议校徽使用已裁切、圈外透明的正方形 PNG；图片不自动裁切或转换。每张图片最多 5 MiB，单次下载限时 15 秒；地址无效、下载失败或格式不符会使构建失败，并指出对应变量。
 
 `UMAMI_SHARE_URL` 是另一个可选的**运行时 Secret**，仅供 Worker 查询页脚统计，没有默认值。未配置时仍正常展示页面和运行 Umami 采集脚本，页脚统计显示加载失败及重试入口。真实分享链接只能配置在本地 `.dev.vars` 或云端 Worker Secret 中，不能放进 `.env.example`、`wrangler.jsonc`、构建变量或 Git。
 
@@ -66,7 +70,7 @@ Dependabot 每周检查根目录的 npm 依赖（包括 `pnpm-lock.yaml`）和 G
 | `甘肃奶蛙大学.com` | `gansunaiwadaxue-com`   | `甘肃奶蛙大学` | `前往红柳易办` | `https://home.lut.edu.cn/` |
 
 1. 在每个 Worker 的「Settings → Build」中连接仓库，生产分支设为 `master`，构建命令设为 `pnpm run build`。
-2. 在同一页的「Build variables and secrets」中设置上表的构建变量。奶龙站可全部省略；奶蛙站至少设置这三个字段。贴纸文案可另外设置 `STICKER_TXT=奶蛙出没`；Umami 及群链接需要不同配置时，再分别添加相应变量。
+2. 在同一页的「Build variables and secrets」中设置上表的构建变量。奶龙站可全部省略；奶蛙站至少设置这三个字段。贴纸文案可另外设置 `STICKER_TXT=奶蛙出没`；自定义校徽和浏览器图标时分别添加 `LOGO_URL`、`FAVICON_URL`。Umami 及群链接需要不同配置时，再分别添加相应变量。
 3. 设置部署命令。奶龙站使用 `pnpm exec wrangler deploy --name gansunailongdaxue-com`；奶蛙站使用 `pnpm exec wrangler deploy --name gansunaiwadaxue-com`。若自定 Worker 名称，将 `--name` 替换为控制台中的实际名称，覆盖仓库中默认的 Worker 名称。
 4. 如需显示访问统计，在每个 Worker 的「Settings → Variables and Secrets」中添加类型为 Secret、名称为 `UMAMI_SHARE_URL` 的配置。它应属于该站点的 Umami 网站；更换采集 ID 或统计服务时同步更换分享链接。
 5. 构建并部署后，进入各自的「Domains（域名）」标签页，添加对应域名。域名需位于当前 Cloudflare 账号管理且已激活的 DNS 区域中；Cloudflare 会自动创建 DNS 记录和证书。
@@ -97,13 +101,14 @@ GO_BTN_TGT=https://home.lut.edu.cn/
 - `src/index.js`：返回静态资源与 `/api/traffic` 统计接口。
 - `src/traffic.js`：Umami 汇总查询、缓存与并发合并。
 - `scripts/build.mjs`：读取构建环境变量，生成静态资源并注入提交版本。
+- `scripts/build-images.mjs`：下载、校验可选图片，构建时替换默认资源。
 - `scripts/site-config.mjs`：公开配置默认值、校验及 HTML 模板替换。
 - `.env.example`：可选构建变量示例。
 - `wrangler.jsonc`：Worker 名称及静态资源配置。
 - `pnpm-lock.yaml`：锁定依赖版本。
 - `pnpm-workspace.yaml`：允许 `esbuild` 和 `workerd` 执行安装脚本。
 
-页面使用原生 HTML/CSS 和少量 JavaScript，构建脚本只复制资源并替换配置；唯一开发依赖是 Wrangler。图标从用户提供的原图裁切，保留圆圈内部图案，圈外透明。
+页面使用原生 HTML/CSS 和少量 JavaScript，构建脚本复制资源、替换配置，并按需下载自定义图片；唯一开发依赖是 Wrangler。默认图标从用户提供的原图裁切，保留圆圈内部图案，圈外透明。
 
 页面采用流光背景与偏心轨道，入场约 2.4 秒，光点与星芒以 32～55 秒周期持续公转。系统开启“减少动态效果”时自动关闭动画。入场状态直接写入 HTML，从首次绘制开始显示动画，不等待交互脚本。页面隐藏时暂停循环动画。GO 按钮的位移、倾斜、流光及箭头动效跟随指针进入方向，校徽悬停也按进入方向移动与倾斜；键盘聚焦默认朝右上方。原生新窗口打开行为保持不变。入场及轨道动画由 CSS 执行，禁用 JavaScript 后所有链接仍可使用。
 

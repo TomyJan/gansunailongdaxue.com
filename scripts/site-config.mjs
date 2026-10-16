@@ -20,7 +20,7 @@ function escapeHTML(value) {
   return value.replace(/[&<>"']/g, (character) => entities[character]);
 }
 
-export function renderPage(template, env, commit) {
+export function renderPage(template, env, commit, images = {}) {
   const config = Object.fromEntries(
     Object.entries(defaults).map(([name, fallback]) => [
       name,
@@ -42,6 +42,7 @@ export function renderPage(template, env, commit) {
       throw new Error(`${name} must be an HTTP(S) URL without credentials`);
   }
   config.COMMIT_SHORT = commit.slice(0, 7);
+  config.FAVICON_PATH = images.faviconPath || "/favicon.ico";
   config.GO_BTN_CLASS =
     Array.from(config.GO_BTN_TXT).length > 2 ? " go--label" : "";
   return template.replace(/__([A-Z_]+)__/g, (token, name) =>

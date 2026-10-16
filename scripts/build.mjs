@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadEnvFile } from "node:process";
 import { renderPage } from "./site-config.mjs";
+import { loadBuildImages } from "./build-images.mjs";
 
 const root = new URL("../", import.meta.url);
 try {
@@ -23,6 +24,8 @@ if (!/^[0-9a-f]{40}$/i.test(commit)) {
   throw new Error("Expected a full Git commit SHA for the footer version.");
 }
 
+// 下载并验证成功后才更新产物，避免失败时覆盖已有页面。
+const images = await loadBuildImages(process.env);
 const pages = await Promise.all(
   ["index.html", "terms/index.html", "privacy/index.html"].map(async (path) => [
     path,
@@ -30,6 +33,7 @@ const pages = await Promise.all(
       await readFile(new URL(`public/${path}`, root), "utf8"),
       process.env,
       commit,
+      images,
     ),
   ]),
 );
@@ -44,6 +48,9 @@ for (const entry of await readdir(output)) {
   });
 }
 await cp(new URL("public/", root), output, { recursive: true });
+await Promise.all(
+  images.files.map(([path, data]) => writeFile(new URL(path, output), data)),
+);
 await Promise.all(
   pages.map(([path, html]) => writeFile(new URL(`dist/${path}`, root), html)),
 );

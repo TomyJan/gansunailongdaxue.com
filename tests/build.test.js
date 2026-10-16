@@ -26,6 +26,8 @@ test("静态构建同时生成两份政策，沿用站点配置且不输出分�
       env: {
         ...process.env,
         ...defaults,
+        LOGO_URL: "",
+        FAVICON_URL: "",
         SITE_NAME: "甘肃奶蛙大学",
         WORKERS_CI_COMMIT_SHA: commit,
         UMAMI_SHARE_URL: "private-share-sentinel",
