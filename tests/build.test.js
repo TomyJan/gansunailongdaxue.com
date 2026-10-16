@@ -12,6 +12,50 @@ const template = await readFile(
 );
 const commit = "1234567890abcdef1234567890abcdef12345678";
 
+test("无效提交 SHA 的构建报错说明来源、长度和排查方式", () => {
+  for (const value of ["8a1fcb2", "   ", "private-invalid-value"]) {
+    assert.throws(
+      () =>
+        execFileSync(process.execPath, ["scripts/build.mjs"], {
+          cwd: new URL("../", import.meta.url),
+          env: { ...process.env, WORKERS_CI_COMMIT_SHA: value },
+          stdio: "pipe",
+        }),
+      (error) => {
+        const message = error.stderr.toString();
+        assert.ok(message.includes("WORKERS_CI_COMMIT_SHA"));
+        assert.ok(message.includes("40 位十六进制"));
+        assert.ok(message.includes(`实际长度：${value.trim().length}`));
+        assert.ok(message.includes("Build variables and secrets"));
+        assert.ok(message.includes(".env"));
+        assert.ok(!message.includes("private-invalid-value"));
+        return true;
+      },
+    );
+  }
+});
+
+test("任一群变量为短横线时从 HTML 移除加群入口及协议中的名称", async () => {
+  const terms = await readFile(
+    new URL("../public/terms/index.html", import.meta.url),
+    "utf8",
+  );
+  for (const env of [
+    { GROUP_NAME: "-" },
+    { GROUP_LINK: " - " },
+    { GROUP_NAME: "-", GROUP_LINK: "-" },
+    { GROUP_NAME: "-", GROUP_LINK: "invalid-unused-url" },
+  ]) {
+    const html = renderPage(template, env, commit);
+    assert.ok(!html.includes("奶群</a"));
+    assert.ok(!html.includes(defaults.GROUP_LINK));
+    assert.ok(html.includes("查找更多奶群和奶站"));
+    const policy = renderPage(terms, env, commit);
+    assert.ok(!policy.includes("「加入"));
+    assert.ok(!policy.includes("<!-- GROUP_"));
+  }
+});
+
 test("静态构建同时生成两份政策，沿用站点配置且不输出分享链接", async () => {
   const root = new URL("../", import.meta.url);
   const sandbox = await mkdtemp(join(tmpdir(), "nailong-build-"));

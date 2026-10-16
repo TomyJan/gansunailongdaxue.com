@@ -12,16 +12,32 @@ try {
 } catch (error) {
   if (error.code !== "ENOENT") throw error;
 }
-const commit = (
-  process.env.WORKERS_CI_COMMIT_SHA ||
-  execFileSync("git", ["rev-parse", "HEAD"], {
-    cwd: fileURLToPath(root),
-    encoding: "utf8",
-  })
-).trim();
+const commitSource = process.env.WORKERS_CI_COMMIT_SHA
+  ? "WORKERS_CI_COMMIT_SHA"
+  : "git rev-parse HEAD";
+let commit;
+try {
+  commit = (
+    process.env.WORKERS_CI_COMMIT_SHA ||
+    execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: fileURLToPath(root),
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    })
+  ).trim();
+} catch {
+  throw new Error(
+    "无法读取页脚提交版本：未设置 WORKERS_CI_COMMIT_SHA，且 git rev-parse HEAD 执行失败。请确认构建目录是 Git 仓库、Git 可用；无 Git 环境时请提供 40 位十六进制的完整提交 SHA。",
+  );
+}
 
 if (!/^[0-9a-f]{40}$/i.test(commit)) {
-  throw new Error("Expected a full Git commit SHA for the footer version.");
+  throw new Error(
+    `页脚提交版本无效。来源：${commitSource}；去除首尾空白后的实际长度：${commit.length}。需要 40 位十六进制的完整 Git 提交 SHA，不能使用短 hash、分支名或变量占位文本。` +
+      (commitSource === "WORKERS_CI_COMMIT_SHA"
+        ? "请检查 Cloudflare Settings → Build → Build variables and secrets、构建命令和 .env 是否覆盖 WORKERS_CI_COMMIT_SHA；删除手动覆盖后重试，或提供正确的完整 SHA。"
+        : "请检查仓库 HEAD 及 Git 对象格式，确认 git rev-parse HEAD 返回 40 位完整提交 SHA。"),
+  );
 }
 
 // 下载并验证成功后才更新产物，避免失败时覆盖已有页面。

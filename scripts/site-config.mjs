@@ -27,7 +27,12 @@ export function renderPage(template, env, commit, images = {}) {
       env[name]?.trim() || fallback,
     ]),
   );
-  for (const name of ["GO_BTN_TGT", "UMAMI_SCRIPT_URL", "GROUP_LINK"]) {
+  const showGroup = config.GROUP_NAME !== "-" && config.GROUP_LINK !== "-";
+  for (const name of [
+    "GO_BTN_TGT",
+    "UMAMI_SCRIPT_URL",
+    ...(showGroup ? ["GROUP_LINK"] : []),
+  ]) {
     let url;
     try {
       url = new URL(config[name]);
@@ -45,7 +50,13 @@ export function renderPage(template, env, commit, images = {}) {
   config.FAVICON_PATH = images.faviconPath || "/favicon.ico";
   config.GO_BTN_CLASS =
     Array.from(config.GO_BTN_TXT).length > 2 ? " go--label" : "";
-  return template.replace(/__([A-Z_]+)__/g, (token, name) =>
-    Object.hasOwn(config, name) ? escapeHTML(config[name]) : token,
-  );
+  // 先处理模板区块，再转义替换，避免把用户文案解释成模板指令。
+  return template
+    .replace(
+      /<!-- GROUP_START -->([\s\S]*?)<!-- GROUP_END -->/g,
+      (_, content) => (showGroup ? content : ""),
+    )
+    .replace(/__([A-Z_]+)__/g, (token, name) =>
+      Object.hasOwn(config, name) ? escapeHTML(config[name]) : token,
+    );
 }
