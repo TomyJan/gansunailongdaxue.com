@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { cp, mkdtemp, readFile, rm } from "node:fs/promises";
+import { cp, mkdtemp, readFile, realpath, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import test from "node:test";
@@ -11,6 +11,25 @@ const template = await readFile(
   "utf8",
 );
 const commit = "1234567890abcdef1234567890abcdef12345678";
+
+test("URL 先规范化再输出，浏览器不会将缺少斜线的 HTTPS 地址当作本站路径", () => {
+  for (const name of ["GO_BTN_TGT", "GROUP_LINK", "UMAMI_SCRIPT_URL"]) {
+    for (const value of ["https:example.org", "https:/example.org"]) {
+      const rendered = renderPage(`__${name}__`, { [name]: value }, commit);
+      assert.equal(
+        new URL(rendered, "https://site.test/").href,
+        "https://example.org/",
+      );
+      assert.equal(rendered, "https://example.org/");
+    }
+    assert.equal(
+      renderPage(
+        `__${name}__`, { [name]: "https://example.org/?a=1&b=2" }, commit,
+      ),
+      "https://example.org/?a=1&amp;b=2",
+    );
+  }
+});
 
 test("无效提交 SHA 的构建报错说明来源、长度和排查方式", () => {
   for (const value of ["8a1fcb2", "   ", "private-invalid-value"]) {
@@ -60,6 +79,11 @@ test("静态构建同时生成两份政策，沿用站点配置且不输出分�
   const root = new URL("../", import.meta.url);
   const sandbox = await mkdtemp(join(tmpdir(), "nailong-build-"));
   try {
+    await symlink(
+      await realpath(new URL("node_modules", root)),
+      join(sandbox, "node_modules"),
+      "junction",
+    );
     for (const directory of ["public", "scripts"]) {
       await cp(new URL(directory, root), join(sandbox, directory), {
         recursive: true,
