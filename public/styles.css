@@ -182,9 +182,19 @@ main {
   text-align: center;
 }
 .logo-wrap {
+  display: block;
   width: 144px;
   height: 144px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
   margin-bottom: 34px;
+}
+.logo-wrap:focus-visible {
+  outline: 3px solid light-dark(#735800, #ffe16a);
+  outline-offset: 8px;
 }
 .logo {
   display: block;

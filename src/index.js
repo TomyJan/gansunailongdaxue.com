@@ -20,8 +20,18 @@ export default {
         );
       }
       const cache = globalThis.caches?.default;
-      const key = new Request(new URL(`/api/traffic?day=${todayStart()}`, url));
       try {
+        // 分享配置仅以摘要区分缓存，避免将 Secret 写入缓存 URL。
+        const digest = await crypto.subtle.digest(
+          "SHA-256",
+          new TextEncoder().encode(env.UMAMI_SHARE_URL),
+        );
+        const shareKey = Array.from(new Uint8Array(digest), (byte) =>
+          byte.toString(16).padStart(2, "0"),
+        ).join("");
+        const key = new Request(
+          new URL(`/api/traffic?day=${todayStart()}&share=${shareKey}`, url),
+        );
         const cached = await cache?.match(key).catch(() => undefined);
         if (cached)
           return new Response(cached.body, {
@@ -37,24 +47,20 @@ export default {
           ctx &&
           todayStart(Date.parse(stats.updatedAt)) === todayStart()
         ) {
-          const ttl = Math.max(
-            1,
-            Math.min(
-              30,
-              Math.floor(
-                (Math.min(
-                  Date.parse(stats.updatedAt) + 30000,
-                  todayStart() + 86400000,
-                ) -
-                  Date.now()) /
-                  1000,
-              ),
-            ),
+          const ttl = Math.floor(
+            (Math.min(
+              Date.parse(stats.updatedAt) + 30000,
+              todayStart() + 86400000,
+            ) -
+              Date.now()) /
+              1000,
           );
-          const stored = Response.json(stats, {
-            headers: { "Cache-Control": `public, max-age=${ttl}` },
-          });
-          ctx.waitUntil(cache.put(key, stored).catch(() => {}));
+          if (ttl > 0) {
+            const stored = Response.json(stats, {
+              headers: { "Cache-Control": `public, max-age=${ttl}` },
+            });
+            ctx.waitUntil(cache.put(key, stored).catch(() => {}));
+          }
         }
         return response;
       } catch {

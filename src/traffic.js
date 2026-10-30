@@ -103,19 +103,25 @@ export function createTrafficService({ fetcher = fetch, now = Date.now } = {}) {
     const current = { key };
     current.promise = load(origin, slug, time)
       .then((value) => {
-        cached = {
-          key,
-          value,
-          until: Math.min(now() + 30000, todayStart(time) + DAY),
-        };
+        // 只有最近启动的请求可以更新缓存；跨日或切换配置后，旧结果仍可
+        // 返回给原调用方，但不得覆盖新请求的成功结果或失败退避状态。
+        if (flight === current) {
+          cached = {
+            key,
+            value,
+            until: Math.min(time + 30000, todayStart(time) + DAY),
+          };
+        }
         return value;
       })
       .catch(() => {
-        cached = {
-          key,
-          failed: true,
-          until: Math.min(now() + 5000, todayStart(time) + DAY),
-        };
+        if (flight === current) {
+          cached = {
+            key,
+            failed: true,
+            until: Math.min(now() + 5000, todayStart(time) + DAY),
+          };
+        }
         throw new Error("Umami unavailable");
       })
       .finally(() => {

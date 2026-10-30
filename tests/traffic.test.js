@@ -5,6 +5,48 @@ import { createTrafficService } from "../src/traffic.js";
 const websiteId = "ee3cbb93-6ca4-4164-8a6c-4bb22b80675d";
 const shareURL = "https://umami.amoe.cc/share/test-share/site";
 
+for (const failed of [false, true]) {
+  test(`昨日请求晚到${failed ? "失败" : "成功"}不覆盖今日缓存`, async () => {
+    const fake = upstream();
+    let clock = Date.parse("2026-10-13T15:59:59.500Z");
+    let release;
+    const gate = new Promise((resolve) => { release = resolve; });
+    let first = true;
+    const load = createTrafficService({ now: () => clock, fetcher: async (...args) => {
+      if (first) {
+        first = false;
+        await gate;
+        if (failed) throw new Error("old request failed");
+      }
+      return fake.fetcher(...args);
+    } });
+    const yesterday = load(shareURL);
+    // 立即处理可能的拒绝，避免测试本身产生 unhandled rejection。
+    const oldResult = yesterday.catch(() => undefined);
+    clock += 1000;
+    const today = await load(shareURL);
+    release();
+    await oldResult;
+    const before = fake.calls.length;
+    assert.deepEqual(await load(shareURL), today);
+    assert.equal(fake.calls.length, before);
+  });
+}
+
+test("慢查询的缓存期限从快照开始时刻计算", async () => {
+  const fake = upstream();
+  let clock = Date.parse("2026-10-13T02:00:00Z");
+  const load = createTrafficService({ now: () => clock, fetcher: async (...args) => {
+    if (String(args[0]).includes("/api/share/")) clock += 7000;
+    return fake.fetcher(...args);
+  } });
+  const initial = await load(shareURL);
+  clock = Date.parse(initial.updatedAt) + 36000;
+  const refreshed = await load(shareURL);
+  assert.notEqual(refreshed.updatedAt, initial.updatedAt);
+  assert.equal(fake.calls.length, 8);
+});
+
 function upstream({
   legacy = false,
   fail = false,
