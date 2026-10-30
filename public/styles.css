@@ -196,6 +196,10 @@ main {
   outline: 3px solid light-dark(#735800, #ffe16a);
   outline-offset: 8px;
 }
+.logo-wrap:focus-visible .logo {
+  transform: translate(var(--hover-x, 0px), var(--hover-y, -10px))
+    rotate(var(--hover-rotation, 0deg));
+}
 .logo {
   display: block;
   width: 100%;

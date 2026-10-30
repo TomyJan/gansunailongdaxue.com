@@ -52,9 +52,11 @@ for (const element of [go, logo]) {
     );
   });
 }
-go.addEventListener("focus", () => {
-  if (go.matches(":focus-visible")) motionDirection(go);
-});
+for (const element of [go, logo]) {
+  element.addEventListener("focus", () => {
+    if (element.matches(":focus-visible")) motionDirection(element);
+  });
+}
 
 scene.addEventListener("pointermove", (event) => {
   if (
