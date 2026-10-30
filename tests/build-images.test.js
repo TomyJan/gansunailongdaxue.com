@@ -49,6 +49,84 @@ function pngChunk(type, data) {
   return Buffer.concat([length, body, checksum]);
 }
 
+function pngImage({ depth = 8, color = 6, compression = 0, filter = 0, interlace = 0, before = [], between = [], raw = Buffer.alloc(9) } = {}) {
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(1, 0);
+  header.writeUInt32BE(1, 4);
+  header.set([depth, color, compression, filter, interlace], 8);
+  return Buffer.concat([
+    logo.subarray(0, 8), pngChunk("IHDR", header), ...before,
+    pngChunk("IDAT", deflateSync(raw)), ...between,
+    pngChunk("IEND", Buffer.alloc(0)),
+  ]);
+}
+
+const invalidPNGStructure = [
+  ["重复 IHDR", await readFile(new URL("fixtures/duplicate-header-small.png", import.meta.url))],
+  ["重复 IHDR 绕过像素上限", await readFile(new URL("fixtures/duplicate-header-limit.png", import.meta.url))],
+  ["RGBA1 非法组合", await readFile(new URL("fixtures/illegal-rgba1.png", import.meta.url))],
+  ["RGB4 非法组合", pngImage({ depth: 4, color: 2 })],
+  ["灰度透明2 非法组合", pngImage({ depth: 2, color: 4 })],
+  ["索引16 非法组合", pngImage({ depth: 16, color: 3, before: [pngChunk("PLTE", Buffer.alloc(3))] })],
+  ["非法压缩方法", pngImage({ compression: 1 })],
+  ["非法滤波方法", pngImage({ filter: 1 })],
+  ["非法交错方法", pngImage({ interlace: 2 })],
+  ["超大 PLTE", pngImage({ before: [pngChunk("PLTE", Buffer.alloc(771))] })],
+  ["不完整 PLTE 颜色项", pngImage({ before: [pngChunk("PLTE", Buffer.alloc(4))] })],
+  ["重复 PLTE", pngImage({ before: [pngChunk("PLTE", Buffer.alloc(3)), pngChunk("PLTE", Buffer.alloc(3))] })],
+  ["PLTE 晚于 IDAT", pngImage({ between: [pngChunk("PLTE", Buffer.alloc(3))] })],
+  ["索引调色板超出位深", pngImage({ depth: 1, color: 3, before: [pngChunk("PLTE", Buffer.alloc(9))] })],
+  ["灰度包含 PLTE", pngImage({ color: 0, before: [pngChunk("PLTE", Buffer.alloc(3))] })],
+  ["空 PLTE", pngImage({ before: [pngChunk("PLTE", Buffer.alloc(0))] })],
+  ["非连续 IDAT", pngImage({ between: [pngChunk("tEXt", Buffer.from("key\0value")), pngChunk("IDAT", Buffer.alloc(0))] })],
+  ["重复 IEND", Buffer.concat([pngImage(), pngChunk("IEND", Buffer.alloc(0))])],
+];
+
+for (const [label, data] of invalidPNGStructure) {
+  for (const embedded of [false, true]) {
+    // 大尺寸绕过样本不适合合法 ICO 目录，独立 PNG 仍覆盖其资源上限。
+    if (embedded && label === "重复 IHDR 绕过像素上限") continue;
+    test(`结构校验拒绝${label}${embedded ? "（ICO 内 PNG）" : "（独立 PNG）"}`, async (t) => {
+      t.mock.method(globalThis, "fetch", async () => new Response(embedded ? wrapICO(data) : data));
+      await assert.rejects(loadBuildImages({ FAVICON_URL: "https://images.test/icon" }));
+    });
+  }
+}
+
+test("PNG 结构和头字段在调用像素解码器前拒绝", async (t) => {
+  t.mock.method(PNG.sync, "read", () => {
+    throw new Error("pixel decoder must not be reached");
+  });
+  for (const [, data] of invalidPNGStructure) {
+    for (const image of [data, wrapICO(data)]) {
+      const mocked = t.mock.method(globalThis, "fetch", async () => new Response(image));
+      await assert.rejects(
+        loadBuildImages({ FAVICON_URL: "https://images.test/icon" }),
+        (error) => !error.message.includes("pixel decoder must not be reached"),
+      );
+      mocked.mock.restore();
+    }
+  }
+});
+
+test("保留所有合法 PNG 位深颜色组合、连续 IDAT 及建议调色板", async (t) => {
+  for (const [depth, color, rowBytes] of [
+    [1, 0, 2], [2, 0, 2], [4, 0, 2], [8, 0, 2], [16, 0, 3],
+    [8, 2, 4], [16, 2, 7],
+    [1, 3, 2], [2, 3, 2], [4, 3, 2], [8, 3, 2],
+    [8, 4, 3], [16, 4, 5], [8, 6, 5], [16, 6, 9],
+  ]) {
+    const palette = [2, 3, 6].includes(color) ? [pngChunk("PLTE", Buffer.alloc(3))] : [];
+    const data = pngImage({ depth, color, before: palette, raw: Buffer.alloc(rowBytes), between: [pngChunk("IDAT", Buffer.alloc(0))] });
+    for (const image of [data, wrapICO(data)]) {
+      const mocked = t.mock.method(globalThis, "fetch", async () => new Response(image));
+      const result = await loadBuildImages({ FAVICON_URL: "https://images.test/icon" });
+      assert.ok(result.files[0][1].equals(image), `depth=${depth}, color=${color}`);
+      mocked.mock.restore();
+    }
+  }
+});
+
 const tinyPNG = PNG.sync.write({ width: 1, height: 1, data: Buffer.from([255, 0, 0, 255]) });
 const dib = Buffer.alloc(48);
 dib.writeUInt32LE(40);

@@ -5,6 +5,13 @@ import decodeICO from "decode-ico";
 const maxBytes = 5 * 1024 * 1024;
 const maxPixels = 4 * 1024 * 1024;
 const pngSignature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+const pngBitDepths = {
+  0: [1, 2, 4, 8, 16],
+  2: [8, 16],
+  3: [1, 2, 4, 8],
+  4: [8, 16],
+  6: [8, 16],
+};
 
 function pngDimensions(data) {
   if (
@@ -19,26 +26,63 @@ function pngDimensions(data) {
   const height = data.readUInt32BE(20);
   if (!width || !height || width * height > maxPixels)
     throw new Error("image exceeds 4 megapixels or has invalid dimensions");
+  if (
+    !pngBitDepths[data[25]]?.includes(data[24]) ||
+    data[26] !== 0 || data[27] !== 0 || ![0, 1].includes(data[28])
+  ) throw new Error("invalid PNG IHDR fields");
   return { width, height };
 }
 
 function validatePNG(data) {
   const { width, height } = pngDimensions(data);
   const compressed = [];
+  let paletteEntries = 0;
+  let seenIDAT = false;
+  let endedIDAT = false;
+  let seenIEND = false;
+  // pngjs 对重复 IHDR/PLTE 较宽松；先固定唯一尺寸和调色板上限，
+  // 仅做关键块结构预检，像素与 CRC 仍由成熟解码器验证。
   for (let offset = 8; offset < data.length;) {
     if (offset + 12 > data.length) throw new Error("truncated PNG chunk");
-    const end = offset + 12 + data.readUInt32BE(offset);
+    const length = data.readUInt32BE(offset);
+    const end = offset + 12 + length;
     if (end > data.length) throw new Error("truncated PNG chunk");
-    if (data.toString("ascii", offset + 4, offset + 8) === "IDAT")
+    const type = data.toString("latin1", offset + 4, offset + 8);
+    if (seenIDAT && type !== "IDAT") endedIDAT = true;
+    if (type === "IHDR") {
+      if (offset !== 8) throw new Error("duplicate PNG IHDR");
+    } else if (type === "PLTE") {
+      if (
+        paletteEntries || seenIDAT || [0, 4].includes(data[25]) ||
+        !length || length % 3 || length > 768 ||
+        (data[25] === 3 && length / 3 > 2 ** data[24])
+      ) throw new Error("invalid PNG PLTE");
+      paletteEntries = length / 3;
+    } else if (type === "IDAT") {
+      if (endedIDAT || (data[25] === 3 && !paletteEntries))
+        throw new Error("invalid PNG IDAT order or missing palette");
+      seenIDAT = true;
       compressed.push(data.subarray(offset + 8, end - 4));
+    } else if (type === "IEND") {
+      if (length || !seenIDAT || end !== data.length)
+        throw new Error("invalid PNG IEND");
+      seenIEND = true;
+    } else if (!/^[a-zA-Z]{4}$/.test(type) || !(data[offset + 4] & 0x20)) {
+      throw new Error("invalid or unsupported PNG chunk");
+    }
     offset = end;
   }
+  if (!seenIEND) throw new Error("missing PNG IEND");
   // pngjs 的交错路径没有解压上限。先约束完整 zlib 输出，再交由它
   // 校验 CRC、滤波、调色板及像素；每像素最多 8 字节，另含 Adam7 行开销。
   inflateSync(Buffer.concat(compressed), {
     maxOutputLength: width * height * 8 + height * 2 + 7,
   });
-  PNG.sync.read(data);
+  const decoded = PNG.sync.read(data);
+  if (
+    decoded.width !== width || decoded.height !== height ||
+    decoded.data.length !== width * height * 4
+  ) throw new Error("decoded PNG dimensions do not match IHDR");
 }
 
 function imageFormat(data) {
