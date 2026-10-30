@@ -11,6 +11,10 @@
   --blue: light-dark(#1353b7, #8fc0ff);
   --orbit-line: light-dark(#b8840070, #f5cc3d85);
   --focus: light-dark(#b8860b, #f8c820);
+  --floating-shadow:
+    0 0 0 1px light-dark(#34270b12, #00000050),
+    0 0 28px 8px light-dark(#34270b24, #00000066),
+    0 12px 48px 8px light-dark(#34270b30, #00000099);
 }
 
 * {
@@ -784,7 +788,7 @@ footer a:hover,
   border-radius: 20px;
   color: light-dark(#2b271c, #fff6df);
   background: light-dark(#fffcf5, #292218);
-  box-shadow: 0 12px 48px light-dark(#34270b25, #00000080);
+  box-shadow: var(--floating-shadow);
 }
 .privacy-notice h2 {
   margin: 0 0 6px;
