@@ -102,7 +102,7 @@ GO_BTN_TGT=https://home.lut.edu.cn/
 
 ### 版本与配置排查
 
-构建把当前提交前 7 位 hash 写入页脚，版本链接指向完整提交 SHA。优先使用 `WORKERS_CI_COMMIT_SHA`，否则执行 `git rev-parse HEAD`。需要 Git 检出目录，或由构建平台提供 40 位完整提交 SHA；无效时明确报错。
+构建把当前提交前 7 位 hash 写入页脚，版本链接指向 GitHub 仓库首页。优先使用 `WORKERS_CI_COMMIT_SHA`，否则执行 `git rev-parse HEAD`。需要 Git 检出目录，或由构建平台提供 40 位完整提交 SHA；无效时明确报错。
 
 如果页面仍显示默认内容，先核对部署版本、变量名称和配置位置：构建变量与运行时变量互不替代，修改后必须重新部署。`WORKERS_CI_COMMIT_SHA` 通常由 Cloudflare 自动提供，不要手动填写短 hash 或分支名。
 

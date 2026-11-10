@@ -12,11 +12,11 @@ const template = await readFile(
 );
 const commit = "1234567890abcdef1234567890abcdef12345678";
 
-test("页脚显示七位版本并链接完整提交", () => {
+test("页脚显示七位版本并链接仓库首页", () => {
   const html = renderPage(template, {}, commit);
   assert.match(
     html,
-    /class="version"\s+href="https:\/\/github\.com\/TomyJan\/gansunailongdaxue\.com\/commit\/1234567890abcdef1234567890abcdef12345678"/,
+    /class="version"\s+href="https:\/\/github\.com\/TomyJan\/gansunailongdaxue\.com"/,
   );
   assert.match(html, />1234567<\/a/);
 });
