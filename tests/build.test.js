@@ -12,6 +12,15 @@ const template = await readFile(
 );
 const commit = "1234567890abcdef1234567890abcdef12345678";
 
+test("页脚显示七位版本并链接完整提交", () => {
+  const html = renderPage(template, {}, commit);
+  assert.match(
+    html,
+    /class="version"\s+href="https:\/\/github\.com\/TomyJan\/gansunailongdaxue\.com\/commit\/1234567890abcdef1234567890abcdef12345678"/,
+  );
+  assert.match(html, />1234567<\/a/);
+});
+
 test("URL 先规范化再输出，浏览器不会将缺少斜线的 HTTPS 地址当作本站路径", () => {
   for (const name of ["GO_BTN_TGT", "GROUP_LINK", "UMAMI_SCRIPT_URL"]) {
     for (const value of ["https:example.org", "https:/example.org"]) {

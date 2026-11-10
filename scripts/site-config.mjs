@@ -47,6 +47,7 @@ export function renderPage(template, env, commit, images = {}) {
       throw new Error(`${name} must be an HTTP(S) URL without credentials`);
     config[name] = url.href;
   }
+  config.COMMIT = commit;
   config.COMMIT_SHORT = commit.slice(0, 7);
   config.FAVICON_PATH = images.faviconPath || "/favicon.ico";
   config.GO_BTN_CLASS =
