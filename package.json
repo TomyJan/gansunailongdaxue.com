@@ -17,6 +17,6 @@
   "devDependencies": {
     "decode-ico": "0.4.1",
     "pngjs": "7.0.0",
-    "wrangler": "4.156.0"
+    "wrangler": "4.158.0"
   }
 }
